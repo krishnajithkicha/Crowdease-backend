@@ -8,7 +8,7 @@ const cors = require("cors");
 const app = express();  
 app.use(express.json());  
 
-// CORS Configuration  
+//CORS Configuration  
 const corsOptions = {  
   origin: "http://localhost:3000", // Your frontend URL  
   methods: ["GET", "POST", "PUT", "DELETE"],  
@@ -27,7 +27,7 @@ if (!mongoUri || !jwtSecret) {
   process.exit(1); // Exit if there's a configuration issue  
 }  
 
-// MongoDB Connection  
+//MongoDB Connection  
 mongoose  
   .connect(mongoUri, { useNewUrlParser: true, useUnifiedTopology: true })  
   .then(() => console.log("Connected to MongoDB"))  
