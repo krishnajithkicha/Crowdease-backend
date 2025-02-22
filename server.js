@@ -21,7 +21,7 @@ const mongoUri = process.env.MONGO_URI;
 const jwtSecret = process.env.JWT_SECRET;  
 const port = process.env.PORT || 5000;  
 
-// Check for required environment variables  
+//Check for required environment variables  
 if (!mongoUri || !jwtSecret) {  
   console.error("Missing required environment variable.");  
   process.exit(1); // Exit if there's a configuration issue  
