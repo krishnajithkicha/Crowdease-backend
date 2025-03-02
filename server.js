@@ -175,33 +175,39 @@ app.post("/api/logout", (req, res) => {
 });  
 
 // Create Event API  
-app.post("/api/events", upload.fields([{ name: 'promotionalImage' }, { name: 'bannerImage' }]), async (req, res) => {  
-  try {  
-    const { eventName, description, category, eventDate, time, duration } = req.body;  
+app.post("/api/events", upload.fields([{ name: "promotionalImage" }, { name: "bannerImage" }]), async (req, res) => {
+  try {
+    console.log("Incoming Event Data:", req.body); // Debugging
+    console.log("Uploaded Files:", req.files); // Debugging
 
-    const promotionalImage = req.files.promotionalImage[0].path; // Path to uploaded promotional image  
-    const bannerImage = req.files.bannerImage[0].path; // Path to uploaded banner image  
+    const { eventName, description, category, eventDate, time, duration } = req.body;
 
-    // Create new event object  
-    const newEvent = new Event({  
-      eventName,  
-      description,  
-      category,  
-      eventDate,  
-      time,  
-      duration,  
-      promotionalImage,  
-      bannerImage,  
-    });  
+    if (!req.files || !req.files.promotionalImage || !req.files.bannerImage) {
+      return res.status(400).json({ message: "Both promotional and banner images are required." });
+    }
 
-    await newEvent.save(); // Save the new event to the database  
+    const promotionalImage = req.files.promotionalImage[0].path;
+    const bannerImage = req.files.bannerImage[0].path;
 
-    res.status(201).json({ message: "Event created successfully", event: newEvent });  
-  } catch (err) {  
-    console.error(err);  
-    res.status(500).json({ message: "Error creating event", error: err.message });  
-  }  
-});  
+    const newEvent = new Event({
+      eventName,
+      description,
+      category,
+      eventDate,
+      time,
+      duration,
+      promotionalImage,
+      bannerImage,
+    });
+
+    await newEvent.save();
+    res.status(201).json({ message: "Event created successfully", event: newEvent });
+  } catch (err) {
+    console.error("Error saving event:", err.message);
+    res.status(500).json({ message: "Server error while creating event", error: err.message });
+  }
+});
+
 
 // Start Server  
 app.listen(port, () => console.log(`Server running on port ${port}`));  
