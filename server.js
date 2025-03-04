@@ -12,7 +12,7 @@ app.use(express.json());
 
 // CORS Configuration
 const corsOptions = {
-  origin: "https://crowdease-frontend.vercel.app/", // Update for production
+  origin: "https://crowdease-frontend.vercel.app", // Update for production
   methods: ["GET", "POST", "PUT", "DELETE"],
   credentials: true,
 };
