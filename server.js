@@ -81,6 +81,30 @@ const uploadToImgBB = async (file) => {
 // Root Route
 app.get("/", (req, res) => res.send("Welcome to the CrowdEase API!"));
 
+// Login API
+app.post("/api/login", async (req, res) => {
+  const { email, password } = req.body;
+
+  try {
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(400).json({ message: "Invalid email or password" });
+    }
+
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.status(400).json({ message: "Invalid email or password" });
+    }
+
+    const token = jwt.sign({ id: user._id, role: user.role }, jwtSecret, { expiresIn: "1h" });
+
+    res.status(200).json({ message: "Login successful", token, user });
+  } catch (err) {
+    console.error("Login error:", err);
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
 // Register API
 app.post("/api/register", async (req, res) => {
   const { email, name, role, password } = req.body;
