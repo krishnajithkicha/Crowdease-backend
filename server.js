@@ -191,6 +191,13 @@ app.post("/api/events", upload.fields([{ name: "promotionalImage" }, { name: "ba
     res.status(500).json({ message: "Server error while creating event", error: err.message });
   }
 });
+// Logout API (Handled on frontend by removing token)
+app.post("/api/logout", (req, res) => {
+  // If using HTTP-only cookies for JWT storage:
+  res.clearCookie("token", { httpOnly: true, secure: true, sameSite: "None" });
+  
+  res.status(200).json({ message: "Logout successful" });
+});
 
 
 // Export for Vercel
