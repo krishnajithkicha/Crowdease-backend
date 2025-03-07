@@ -42,7 +42,7 @@ const userSchema = new mongoose.Schema({
 
 // Event Schema
 const eventSchema = new mongoose.Schema({
-  organizerId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+  organizerId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: false },
   eventName: { type: String, required: true },
   description: { type: String, required: true },
   category: { type: String, required: true },
@@ -150,18 +150,30 @@ app.post("/api/events", upload.fields([{ name: "promotionalImage" }, { name: "ba
     console.log("Incoming Event Data:", req.body);
     console.log("Uploaded Files:", req.files);
 
-    const { organizerId, eventName, description, category, eventDate, time, duration } = req.body;
-    
+    const { eventName, description, category, eventDate, time, duration } = req.body;
+
+    // Ensure required fields are present
+    if (!eventName || !description || !category || !eventDate || !time || !duration) {
+      return res.status(400).json({ message: "All event details are required." });
+    }
+
+    // Ensure images are uploaded
     if (!req.files || !req.files.promotionalImage || !req.files.bannerImage) {
       return res.status(400).json({ message: "Both promotional and banner images are required." });
     }
 
     // Upload images to ImgBB
-    const promotionalImage = await uploadToImgBB(req.files.promotionalImage[0]);
-    const bannerImage = await uploadToImgBB(req.files.bannerImage[0]);
+    let promotionalImage, bannerImage;
+    try {
+      promotionalImage = await uploadToImgBB(req.files.promotionalImage[0]);
+      bannerImage = await uploadToImgBB(req.files.bannerImage[0]);
+    } catch (imgErr) {
+      console.error("Image upload failed:", imgErr);
+      return res.status(500).json({ message: "Image upload failed", error: imgErr.message });
+    }
 
+    // Create and save event
     const newEvent = new Event({
-      organizerId,
       eventName,
       description,
       category,
@@ -175,7 +187,7 @@ app.post("/api/events", upload.fields([{ name: "promotionalImage" }, { name: "ba
     await newEvent.save();
     res.status(201).json({ message: "Event created successfully", event: newEvent });
   } catch (err) {
-    console.error("Error saving event:", err.message);
+    console.error("Error saving event:", err);
     res.status(500).json({ message: "Server error while creating event", error: err.message });
   }
 });
