@@ -129,7 +129,7 @@ app.post("/api/register", async (req, res) => {
 });
 
 // Middleware to enforce single-event rule
-const checkSingleEventRule = async (req, res, next) => {
+/*const checkSingleEventRule = async (req, res, next) => {
   try {
     const { organizerId } = req.body;
     const existingEvent = await Event.findOne({ organizerId });
@@ -143,14 +143,15 @@ const checkSingleEventRule = async (req, res, next) => {
     res.status(500).json({ message: "Server error", error: error.message });
   }
 };
-
+*/
 // Create Event API (Uses ImgBB)
-app.post("/api/events", checkSingleEventRule, upload.fields([{ name: "promotionalImage" }, { name: "bannerImage" }]), async (req, res) => {
+app.post("/api/events", upload.fields([{ name: "promotionalImage" }, { name: "bannerImage" }]), async (req, res) => {
   try {
     console.log("Incoming Event Data:", req.body);
     console.log("Uploaded Files:", req.files);
 
     const { organizerId, eventName, description, category, eventDate, time, duration } = req.body;
+    
     if (!req.files || !req.files.promotionalImage || !req.files.bannerImage) {
       return res.status(400).json({ message: "Both promotional and banner images are required." });
     }
@@ -178,6 +179,7 @@ app.post("/api/events", checkSingleEventRule, upload.fields([{ name: "promotiona
     res.status(500).json({ message: "Server error while creating event", error: err.message });
   }
 });
+
 
 // Export for Vercel
 module.exports = app;
