@@ -42,6 +42,7 @@ const userSchema = new mongoose.Schema({
 
 // Event Schema
 const eventSchema = new mongoose.Schema({
+  organizerId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
   eventName: { type: String, required: true },
   description: { type: String, required: true },
   category: { type: String, required: true },
@@ -103,34 +104,29 @@ app.post("/api/register", async (req, res) => {
   }
 });
 
-// Login API
-app.post("/api/login", async (req, res) => {
-  const { email, password, role } = req.body;
-
+// Middleware to enforce single-event rule
+const checkSingleEventRule = async (req, res, next) => {
   try {
-    const user = await User.findOne({ email, role });
-    if (!user || !(await bcrypt.compare(password, user.password))) {
-      return res.status(401).json({ message: "Invalid email or password" });
+    const { organizerId } = req.body;
+    const existingEvent = await Event.findOne({ organizerId });
+
+    if (existingEvent) {
+      return res.status(400).json({ message: "You can only create one event at a time." });
     }
-
-    const token = jwt.sign({ id: user._id, role }, jwtSecret, { expiresIn: "1h" });
-    res.status(200).json({ message: "Login successful", token, user: { email, name: user.name, role } });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error", error: err.message });
+    next();
+  } catch (error) {
+    console.error("Error checking existing event:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
   }
-});
-
-// Logout API
-app.post("/api/logout", (req, res) => res.status(200).json({ message: "Logged out successfully" }));
+};
 
 // Create Event API (Uses ImgBB)
-app.post("/api/events", upload.fields([{ name: "promotionalImage" }, { name: "bannerImage" }]), async (req, res) => {
+app.post("/api/events", checkSingleEventRule, upload.fields([{ name: "promotionalImage" }, { name: "bannerImage" }]), async (req, res) => {
   try {
     console.log("Incoming Event Data:", req.body);
     console.log("Uploaded Files:", req.files);
 
-    const { eventName, description, category, eventDate, time, duration } = req.body;
+    const { organizerId, eventName, description, category, eventDate, time, duration } = req.body;
     if (!req.files || !req.files.promotionalImage || !req.files.bannerImage) {
       return res.status(400).json({ message: "Both promotional and banner images are required." });
     }
@@ -140,6 +136,7 @@ app.post("/api/events", upload.fields([{ name: "promotionalImage" }, { name: "ba
     const bannerImage = await uploadToImgBB(req.files.bannerImage[0]);
 
     const newEvent = new Event({
+      organizerId,
       eventName,
       description,
       category,
