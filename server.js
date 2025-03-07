@@ -52,10 +52,19 @@ const eventSchema = new mongoose.Schema({
   promotionalImage: { type: String, required: true },
   bannerImage: { type: String, required: true },
 });
+// Venue Schema  
+const venueSchema = new mongoose.Schema({  
+  venueName: { type: String, required: true },  
+  maxCapacity: { type: Number, required: true },  
+  seatingType: { type: String, enum: ["seatSelection", "noPreference"], required: true },  
+  createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true }, // Reference to the user  
+});  
+
 
 // Models
 const User = mongoose.model("User", userSchema);
 const Event = mongoose.model("Event", eventSchema);
+const Venue = mongoose.model("Venue", venueSchema);  
 
 // Multer Memory Storage (since Vercel doesn't support file uploads)
 const upload = multer({ storage: multer.memoryStorage() });
@@ -198,7 +207,26 @@ app.post("/api/logout", (req, res) => {
   
   res.status(200).json({ message: "Logout successful" });
 });
+// Create Venue API  
+app.post("/api/venues", authenticateToken, async (req, res) => {  
+  const { venueName, maxCapacity, seatingType } = req.body;  
+  const userId = req.user.id; // Extract user ID from the authenticated request  
 
+  try {  
+    const newVenue = new Venue({  
+      venueName,  
+      maxCapacity,  
+      seatingType,  
+      createdBy: userId, // Associate venue with the user  
+    });  
+
+    await newVenue.save();  
+    res.status(201).json({ message: "Venue created successfully", venue: newVenue });  
+  } catch (err) {  
+    console.error("Error saving venue:", err.message);  
+    res.status(500).json({ message: "Server error while creating venue", error: err.message });  
+  }  
+});  
 
 // Export for Vercel
 module.exports = app;
