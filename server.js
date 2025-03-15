@@ -130,30 +130,53 @@ app.post("/api/register", async (req, res) => {
   }  
 });  
 
-// Create Venue API (no authentication)  
-// Create Venue API (updated to include seatingLayout)
-app.post("/api/venues", async (req, res) => {
-  const { venueName, maxCapacity, seatingType, seatingLayout } = req.body;
+// Create Venue API (updated for image upload)
+app.post(
+  "/api/venues",
+  upload.fields([{ name: "venueImage" }, { name: "seatingLayout" }]),
+  async (req, res) => {
+    const { venueName, maxCapacity, seatingType } = req.body;
 
-  try {
-    // Create the new venue
-    const newVenue = new Venue({
-      venueName,
-      maxCapacity,
-      seatingType,
-      seatingLayout, // Save seating layout in the database
-    });
+    try {
+      // Ensure required fields are present
+      if (!venueName || !maxCapacity || !seatingType) {
+        return res.status(400).json({ message: "All fields are required." });
+      }
 
-    // Save the venue to the database
-    await newVenue.save();
-    res.status(201).json({ message: "Venue created successfully", venue: newVenue });
-  } catch (err) {
-    res.status(500).json({
-      message: "Server error while creating venue",
-      error: err.message,
-    });
+      // Ensure images are uploaded
+      if (!req.files || !req.files.venueImage || !req.files.seatingLayout) {
+        return res.status(400).json({ message: "Venue and seating layout images are required." });
+      }
+
+      // Upload images to ImgBB
+      let venueImageUrl, seatingLayoutUrl;
+      try {
+        venueImageUrl = await uploadToImgBB(req.files.venueImage[0]);
+        seatingLayoutUrl = await uploadToImgBB(req.files.seatingLayout[0]);
+      } catch (imgErr) {
+        console.error("Image upload failed:", imgErr);
+        return res.status(500).json({ message: "Image upload failed", error: imgErr.message });
+      }
+
+      // Create and save venue
+      const newVenue = new Venue({
+        venueName,
+        maxCapacity,
+        seatingType,
+        seatingLayout: seatingLayoutUrl, // Save seating layout URL
+        image: venueImageUrl, // Save venue image URL
+      });
+
+      await newVenue.save();
+      res.status(201).json({ message: "Venue created successfully", venue: newVenue });
+    } catch (err) {
+      res.status(500).json({
+        message: "Server error while creating venue",
+        error: err.message,
+      });
+    }
   }
-});
+);
 
 
 // Create Event API (no authentication)  
