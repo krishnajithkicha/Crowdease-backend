@@ -12,7 +12,7 @@ const app = express();
 app.use(express.json());  
 
 const corsOptions = {  
-  origin: "https://crowdease-frontend.vercel.app",  
+  origin: ["http://localhost:3000","https://crowdease-frontend.vercel.app"],  
   methods: ["GET", "POST", "PUT", "DELETE"],  
   allowedHeaders: ["Content-Type", "Authorization"],  
   credentials: true,  
@@ -50,11 +50,16 @@ const eventSchema = new mongoose.Schema({
 });  
 
 // Venue Schema (removed createdBy)  
-const venueSchema = new mongoose.Schema({  
-  venueName: { type: String, required: true },  
-  maxCapacity: { type: Number, required: true },  
-  seatingType: { type: String, enum: ["seatSelection", "noPreference"], required: true },  
-});  
+const venueSchema = new mongoose.Schema({
+  venueName: { type: String, required: true },
+  maxCapacity: { type: Number, required: true },
+  seatingType: {
+    type: String,
+    enum: ["seatSelection", "noPreference"],
+    required: true,
+  },
+  seatingLayout: { type: String }, // New field for seating arrangement
+});
 
 // Models  
 const User = mongoose.models.User || mongoose.model("User", userSchema);  
@@ -126,17 +131,30 @@ app.post("/api/register", async (req, res) => {
 });  
 
 // Create Venue API (no authentication)  
-app.post("/api/venues", async (req, res) => {  
-  const { venueName, maxCapacity, seatingType } = req.body;  
+// Create Venue API (updated to include seatingLayout)
+app.post("/api/venues", async (req, res) => {
+  const { venueName, maxCapacity, seatingType, seatingLayout } = req.body;
 
-  try {  
-    const newVenue = new Venue({ venueName, maxCapacity, seatingType });  
-    await newVenue.save();  
-    res.status(201).json({ message: "Venue created successfully", venue: newVenue });  
-  } catch (err) {  
-    res.status(500).json({ message: "Server error while creating venue", error: err.message });  
-  }  
-});  
+  try {
+    // Create the new venue
+    const newVenue = new Venue({
+      venueName,
+      maxCapacity,
+      seatingType,
+      seatingLayout, // Save seating layout in the database
+    });
+
+    // Save the venue to the database
+    await newVenue.save();
+    res.status(201).json({ message: "Venue created successfully", venue: newVenue });
+  } catch (err) {
+    res.status(500).json({
+      message: "Server error while creating venue",
+      error: err.message,
+    });
+  }
+});
+
 
 // Create Event API (no authentication)  
 app.post("/api/events", upload.fields([{ name: "promotionalImage" }, { name: "bannerImage" }]), async (req, res) => {  
