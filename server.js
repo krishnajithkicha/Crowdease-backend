@@ -222,6 +222,23 @@ app.post("/api/events", upload.fields([{ name: "promotionalImage" }, { name: "ba
     res.status(500).json({ message: "Server error while creating event", error: err.message });  
   }  
 });  
+// Endpoint to handle ticket pricing form submission
+app.post("/api/ticket-pricing", upload.single("promoImage"), (req, res) => {
+  const { ticketType, ticketPrice, discount, paymentOption } = req.body;
+  const promoImage = req.file ? req.file.filename : null;
+
+  // Save to the database (mock implementation)
+  const ticketDetails = {
+    ticketType,
+    ticketPrice: parseFloat(ticketPrice),
+    discount: parseFloat(discount),
+    paymentOption,
+    promoImage,
+  };
+
+  console.log("Ticket Details Saved:", ticketDetails);
+  res.status(200).json({ message: "Ticket pricing saved successfully!", ticketDetails });
+});
 
 // Start the server  
 app.listen(port, () => {  
