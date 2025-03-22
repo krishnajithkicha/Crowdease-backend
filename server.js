@@ -234,6 +234,29 @@ app.post(
     }  
   }
 );
+app.get("/api/events", authMiddleware, async (req, res) => {
+  try {
+    const userId = req.user.id; // Get organizer's ID from token
+    const userRole = req.user.role;
+
+    if (userRole !== "Event Organizer") {
+      return res.status(403).json({ message: "Access denied" });
+    }
+
+    // Fetch only the events created by the logged-in organizer
+    const events = await Event.find({ organizerId: userId }).populate("venueId");
+
+    if (events.length === 0) {
+      return res.status(404).json({ message: "No events found" });
+    }
+
+    res.status(200).json(events);
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+
 
 
 // Start the server  
