@@ -7,12 +7,14 @@ const cors = require("cors");
 const multer = require("multer");  
 const axios = require("axios");  
 const FormData = require("form-data");  
+const authMiddleware = require("./authMiddleware");
+
 
 const app = express();  
 app.use(express.json());  
 
 const corsOptions = {  
-  origin: ["http://localhost:3000","https://crowdease-frontend.vercel.app"],  
+  origin: ["http://localhost:3000", "https://crowdease-frontend.vercel.app"],  
   methods: ["GET", "POST", "PUT", "DELETE"],  
   allowedHeaders: ["Content-Type", "Authorization"],  
   credentials: true,  
@@ -37,7 +39,7 @@ const userSchema = new mongoose.Schema({
   role: { type: String, enum: ["Admin", "Attendee", "Event Organizer", "Staff"], required: true },  
 });  
 
-// Event Schema (removed organizerId)  
+// Event Schema  
 const eventSchema = new mongoose.Schema({  
   eventName: { type: String, required: true },  
   description: { type: String, required: true },  
@@ -47,19 +49,22 @@ const eventSchema = new mongoose.Schema({
   duration: { type: String, required: true },  
   promotionalImage: { type: String, required: true },  
   bannerImage: { type: String, required: true },  
+  venueId: { type: mongoose.Schema.Types.ObjectId, ref: 'Venue' }, // Reference to Venue  
+  organizerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, // Reference to User  
 });  
 
-// Venue Schema (removed createdBy)  
-const venueSchema = new mongoose.Schema({
-  venueName: { type: String, required: true },
-  maxCapacity: { type: Number, required: true },
-  seatingType: {
-    type: String,
-    enum: ["seatSelection", "noPreference"],
-    required: true,
-  },
-  seatingLayout: { type: String }, // New field for seating arrangement
-});
+// Venue Schema  
+const venueSchema = new mongoose.Schema({  
+  venueName: { type: String, required: true },  
+  maxCapacity: { type: Number, required: true },  
+  seatingType: {  
+    type: String,  
+    enum: ["seatSelection", "noPreference"],  
+    required: true,  
+  },  
+  seatingLayout: { type: String }, // for seating arrangement  
+  image: { type: String, required: true }, // URL for venue image  
+});  
 
 // Models  
 const User = mongoose.models.User || mongoose.model("User", userSchema);  
@@ -130,115 +135,106 @@ app.post("/api/register", async (req, res) => {
   }  
 });  
 
-// Create Venue API (updated for image upload)
+// Unified Create Event API  
 app.post(
-  "/api/venues",
-  upload.fields([{ name: "venueImage" }, { name: "seatingLayout" }]),
+  "/api/events",
+  authMiddleware, // Protect this route
+  upload.fields([
+    { name: "promotionalImage" },
+    { name: "bannerImage" },
+    { name: "venueImage" },
+    { name: "seatingLayout" },
+    { name: "promoImage" },
+  ]),
   async (req, res) => {
-    const { venueName, maxCapacity, seatingType } = req.body;
-
     try {
-      // Ensure required fields are present
-      if (!venueName || !maxCapacity || !seatingType) {
-        return res.status(400).json({ message: "All fields are required." });
-      }
+      const {  
+        eventName,  
+        description,  
+        category,  
+        eventDate,  
+        time,  
+        duration,  
+        venueName,  
+        maxCapacity,  
+        seatingType,  
+        ticketType,  
+        ticketPrice,  
+        discount,  
+        paymentOption  
+      } = req.body;  
 
-      // Ensure images are uploaded
-      if (!req.files || !req.files.venueImage || !req.files.seatingLayout) {
-        return res.status(400).json({ message: "Venue and seating layout images are required." });
-      }
+      // Ensure required fields are present  
+      if (!eventName || !description || !category || !eventDate || !time || !duration ||  
+          !venueName || !maxCapacity || !seatingType || !ticketType || !ticketPrice || !paymentOption ||!discount) {  
+        return res.status(400).json({ message: "All fields are required." });  
+      }  
 
-      // Upload images to ImgBB
-      let venueImageUrl, seatingLayoutUrl;
-      try {
-        venueImageUrl = await uploadToImgBB(req.files.venueImage[0]);
-        seatingLayoutUrl = await uploadToImgBB(req.files.seatingLayout[0]);
-      } catch (imgErr) {
-        console.error("Image upload failed:", imgErr);
-        return res.status(500).json({ message: "Image upload failed", error: imgErr.message });
-      }
+      // Get the user ID from authentication
+      const userId = req.user.id; 
 
-      // Create and save venue
-      const newVenue = new Venue({
-        venueName,
-        maxCapacity,
-        seatingType,
-        seatingLayout: seatingLayoutUrl, // Save seating layout URL
-        image: venueImageUrl, // Save venue image URL
-      });
+      // Check if the organizer already has an event  
+      const existingEvent = await Event.findOne({ organizerId: userId });  
+      if (existingEvent) {  
+        return res.status(400).json({ message: "You can only create one event at a time." });  
+      }  
 
-      await newVenue.save();
-      res.status(201).json({ message: "Venue created successfully", venue: newVenue });
-    } catch (err) {
-      res.status(500).json({
-        message: "Server error while creating venue",
-        error: err.message,
-      });
-    }
+      // Ensure images are uploaded  
+      if (!req.files ||  
+          !req.files.promotionalImage || !req.files.bannerImage ||   
+          !req.files.venueImage || !req.files.seatingLayout) {  
+        return res.status(400).json({ message: "All images are required." });  
+      }  
+
+      // Upload images to ImgBB  
+      let promotionalImage, bannerImage, venueImageUrl, seatingLayoutUrl;  
+      try {  
+        promotionalImage = await uploadToImgBB(req.files.promotionalImage[0]);  
+        bannerImage = await uploadToImgBB(req.files.bannerImage[0]);  
+        venueImageUrl = await uploadToImgBB(req.files.venueImage[0]);  
+        seatingLayoutUrl = await uploadToImgBB(req.files.seatingLayout[0]);  
+      } catch (imgErr) {  
+        console.error("Image upload failed:", imgErr);  
+        return res.status(500).json({ message: "Image upload failed", error: imgErr.message });  
+      }  
+
+      // Create Venue  
+      const newVenue = new Venue({  
+        venueName,  
+        maxCapacity,  
+        seatingType,  
+        seatingLayout: seatingLayoutUrl,  
+        image: venueImageUrl,  
+      });  
+      await newVenue.save();  
+
+      // Create Event  
+      const newEvent = new Event({  
+        eventName,  
+        description,  
+        category,  
+        eventDate,  
+        time,  
+        duration,  
+        promotionalImage,  
+        bannerImage,  
+        venueId: newVenue._id, // Save the Venue ID reference  
+        organizerId: userId, // Now, it correctly assigns the logged-in user's ID  
+      });  
+
+      await newEvent.save();  
+
+      res.status(201).json({ message: "Event created successfully", event: newEvent });  
+    } catch (err) {  
+      console.error("Server error while creating event:", err);  
+      res.status(500).json({  
+        message: "Server error while creating event",  
+        error: err.message,  
+      });  
+    }  
   }
 );
 
-
-// Create Event API (no authentication)  
-app.post("/api/events", upload.fields([{ name: "promotionalImage" }, { name: "bannerImage" }]), async (req, res) => {  
-  try {  
-    const { eventName, description, category, eventDate, time, duration } = req.body;  
-
-    // Ensure required fields are present  
-    if (!eventName || !description || !category || !eventDate || !time || !duration) {  
-      return res.status(400).json({ message: "All event details are required." });  
-    }  
-
-    // Ensure images are uploaded  
-    if (!req.files || !req.files.promotionalImage || !req.files.bannerImage) {  
-      return res.status(400).json({ message: "Both promotional and banner images are required." });  
-    }  
-
-    // Upload images to ImgBB  
-    let promotionalImage, bannerImage;  
-    try {  
-      promotionalImage = await uploadToImgBB(req.files.promotionalImage[0]);  
-      bannerImage = await uploadToImgBB(req.files.bannerImage[0]);  
-    } catch (imgErr) {  
-      console.error("Image upload failed:", imgErr);  
-      return res.status(500).json({ message: "Image upload failed", error: imgErr.message });  
-    }  
-
-    // Create and save event  
-    const newEvent = new Event({  
-      eventName,  
-      description,  
-      category,  
-      eventDate,  
-      time,  
-      duration,  
-      promotionalImage,  
-      bannerImage,  
-    });  
-
-    await newEvent.save();  
-    res.status(201).json({ message: "Event created successfully", event: newEvent });  
-  } catch (err) {  
-    res.status(500).json({ message: "Server error while creating event", error: err.message });  
-  }  
-});  
-// Endpoint to handle ticket pricing form submission
-app.post("/api/ticket-pricing", upload.single("promoImage"), (req, res) => {
-  const { ticketType, ticketPrice, discount, paymentOption } = req.body;
-  const promoImage = req.file ? req.file.filename : null;
-
-  // Save to the database (mock implementation)
-  const ticketDetails = {
-    ticketType,
-    ticketPrice: parseFloat(ticketPrice),
-    discount: parseFloat(discount),
-    paymentOption,
-    promoImage,
-  };
-
-  console.log("Ticket Details Saved:", ticketDetails);
-  res.status(200).json({ message: "Ticket pricing saved successfully!", ticketDetails });
-});
 
 // Start the server  
 app.listen(port, () => {  
