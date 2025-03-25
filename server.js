@@ -236,27 +236,91 @@ app.post(
 );
 app.get("/api/events", authMiddleware, async (req, res) => {
   try {
-    const userId = req.user.id; // Get organizer's ID from token
+    const userId = req.user.id; // Extract organizer's ID from token
     const userRole = req.user.role;
 
+    // Check if the user is an Event Organizer
     if (userRole !== "Event Organizer") {
       return res.status(403).json({ message: "Access denied" });
     }
 
-    // Fetch only the events created by the logged-in organizer
+    // Fetch events created by the logged-in organizer
     const events = await Event.find({ organizerId: userId }).populate("venueId");
 
-    if (events.length === 0) {
-      return res.status(404).json({ message: "No events found" });
+    // Return no events found if the query is empty
+    if (!events.length) {
+      return res.status(200).json([]);
     }
 
     res.status(200).json(events);
   } catch (err) {
+    console.error("Error fetching events:", err.message);
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+app.put("/api/events/:eventId", authMiddleware, async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    const userId = req.user.id;
+
+    console.log("Request Body:", req.body);
+    console.log("Event ID:", eventId, "User ID:", userId);
+
+    const event = await Event.findOne({ _id: eventId, organizerId: userId });
+    if (!event) {
+      console.log("Event not found or access denied");
+      return res.status(404).json({ message: "Event not found or access denied" });
+    }
+
+    // Update event details
+    event.eventName = req.body.eventName || event.eventName;
+    event.description = req.body.description || event.description;
+    event.category = req.body.category || event.category;
+    event.eventDate = req.body.eventDate || event.eventDate;
+    event.time = req.body.time || event.time;
+    event.duration = req.body.duration || event.duration;
+
+    await event.save();
+    console.log("Event updated successfully");
+    res.status(200).json({ message: "Event updated successfully", event });
+  } catch (err) {
+    console.error("Error updating event:", err.message);
     res.status(500).json({ message: "Server error", error: err.message });
   }
 });
 
 
+
+
+app.delete("/api/events/:eventId", authMiddleware, async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    const userId = req.user.id;
+
+    // Check if the event exists and belongs to the organizer
+    const event = await Event.findOne({ _id: eventId, organizerId: userId });
+    if (!event) {
+      return res.status(404).json({ message: "Event not found or access denied" });
+    }
+
+    await Event.deleteOne({ _id: eventId });
+    res.status(200).json({ message: "Event deleted successfully" });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+const blacklist = new Set(); // Temporary in-memory token blacklist (for better scalability, use Redis)
+
+// Logout API
+app.post("/api/logout", authMiddleware, (req, res) => {
+  try {
+    res.status(200).json({ message: "Logged out successfully" });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
 
 
 // Start the server  
