@@ -311,7 +311,17 @@ app.delete("/api/events/:eventId", authMiddleware, async (req, res) => {
   }
 });
 
-const blacklist = new Set(); // Temporary in-memory token blacklist (for better scalability, use Redis)
+ // Fetch all events for attendees
+app.get("/api/all-events", async (req, res) => {
+  try {
+    const events = await Event.find().populate("venueId"); // Fetch all events and populate venue details
+    res.status(200).json(events);
+  } catch (err) {
+    console.error("Error fetching all events:", err.message);
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
 
 // Logout API
 app.post("/api/logout", authMiddleware, (req, res) => {
