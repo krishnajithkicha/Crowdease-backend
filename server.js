@@ -321,6 +321,22 @@ app.get("/api/all-events", async (req, res) => {
     res.status(500).json({ message: "Server error", error: err.message });
   }
 });
+app.get("/api/events/:eventId", async (req, res) => {
+  try {
+      const { eventId } = req.params;
+      const event = await Event.findById(eventId).populate("venueId");
+
+      if (!event) {
+          return res.status(404).json({ message: "Event not found" });
+      }
+
+      res.json(event);
+  } catch (error) {
+      console.error("Error fetching event:", error);
+      res.status(500).json({ message: "Server error" });
+  }
+});
+
 
 
 // Logout API
