@@ -224,6 +224,17 @@ app.post(
 }
 }
 );
+app.get("/api/events", authMiddleware, async (req, res) => {
+  try {
+    const userId = req.user.id; // Get the organizer's ID from JWT token
+    const events = await Event.find({ organizerId: userId }).populate("venueId");
+    res.status(200).json(events);
+  } catch (err) {
+    console.error("Error fetching events:", err.message);
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
 
 // Fetch All Events
 app.get("/api/all-events", async (req, res) => {
