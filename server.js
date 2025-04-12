@@ -318,6 +318,25 @@ app.delete("/api/events/:eventId", authMiddleware, async (req, res) => {
     res.status(500).json({ message: "Server error", error: err.message });
   }
 });
+app.get("/api/events/:eventId", async (req, res) => {
+  const { eventId } = req.params;
+
+  if (!mongoose.Types.ObjectId.isValid(eventId)) {
+    return res.status(400).json({ message: "Invalid event ID format." });
+  }
+
+  try {
+    const event = await Event.findById(eventId).populate("venueId");
+    if (!event) {
+      return res.status(404).json({ message: "Event not found" });
+    }
+    res.status(200).json(event);
+  } catch (err) {
+    console.error("Error fetching event:", err.message);
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
 
 // Start Server
 app.listen(port, () => {
