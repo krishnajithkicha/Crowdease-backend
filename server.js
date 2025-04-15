@@ -336,6 +336,62 @@ app.get("/api/events/:eventId", async (req, res) => {
     res.status(500).json({ message: "Server error", error: err.message });
   }
 });
+app.put("/api/events/:eventId/book-seats", authMiddleware, async (req, res) => {
+  const { eventId } = req.params;
+  const { seatIds } = req.body;
+
+  try {
+    const event = await Event.findById(eventId);
+    if (!event) return res.status(404).json({ message: "Event not found" });
+
+    seatIds.forEach((seatId) => {
+      const seat = event.seatingLayout.find((seat) => seat.id === seatId);
+      if (seat && !seat.occupied) {
+        seat.occupied = true;
+        seat.attendee = req.user.id;
+      }
+    });
+
+    await event.save();
+    res.status(200).json({ message: "Seats booked successfully" });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+
+// Book Seats
+app.post("/api/bookings", authMiddleware, async (req, res) => {
+  try {
+    const { eventId, seatIds, attendeeId } = req.body;
+    const event = await Event.findById(eventId);
+    if (!event) return res.status(404).json({ message: "Event not found" });
+
+    let updatedCount = 0;
+
+    event.seatingLayout = event.seatingLayout.map((seat) => {
+      if (seatIds.includes(seat.id)) {
+        if (seat.occupied) {
+          throw new Error(`Seat ${seat.id} is already booked`);
+        }
+        updatedCount++;
+        return {
+          ...seat,
+          occupied: true,
+          attendee: attendeeId,
+        };
+      }
+      return seat;
+    });
+
+    await event.save();
+
+    res.status(200).json({ message: `${updatedCount} seat(s) booked successfully`, event });
+  } catch (err) {
+    console.error("Booking Error:", err.message);
+    res.status(500).json({ message: "Booking failed", error: err.message });
+  }
+});
 
 
 // Start Server
