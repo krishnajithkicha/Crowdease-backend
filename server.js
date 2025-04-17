@@ -143,14 +143,14 @@ app.post("/api/register", async (req, res) => {
 function generateSeats(sectionName, rows, seatsPerRow) {
   const layout = [];
   for (let r = 0; r < rows; r++) {
-    const rowNum   = r + 1;
-    const rowLabel = String.fromCharCode(64 + rowNum); // 1->A, 2->B, etc.
+    const rowNum = r + 1;
+    const rowLabel = String.fromCharCode(64 + rowNum); // A, B, ...
     for (let s = 1; s <= seatsPerRow; s++) {
       layout.push({
-        id:       `${rowLabel}${s}`,           // e.g. "A1"
-        row:      rowNum,                      // now 1-based
-        column:   s,
-        type:     sectionName.toLowerCase(),   // "gold", "vip", "normal"
+        id: `${sectionName}-${rowLabel}${s}`, // Unique ID per section
+        row: rowNum,
+        column: s,
+        type: sectionName.toLowerCase(),
         occupied: false,
         attendee: null,
       });
@@ -415,53 +415,43 @@ app.get("/api/events/:eventId", async (req, res) => {
 // Book Seats
 app.post("/api/bookings", authMiddleware, async (req, res) => {
   try {
-    const { eventId, seatIds } = req.body;
-
-    if (!eventId || !Array.isArray(seatIds) || seatIds.length === 0) {
-      return res.status(400).json({ message: "Event ID and seat IDs are required." });
-    }
+    const { eventId, seatIds, attendeeId } = req.body;
 
     const event = await Event.findById(eventId);
     if (!event) return res.status(404).json({ message: "Event not found" });
 
-    // Count how many seats this user already booked
-    const alreadyBookedByUser = event.seatingLayout.filter(
-      (seat) => seat.attendee?.toString() === req.user.id
-    );
-
-    // Prevent overbooking
-    if (alreadyBookedByUser.length + seatIds.length > 6) {
-      return res.status(400).json({
-        message: "You can only book up to 6 seats per event.",
-      });
-    }
-
-    // Check if any requested seats are already occupied
-    const alreadyOccupied = seatIds.filter((seatId) => {
-      const seat = event.seatingLayout.find((s) => s.id === seatId);
-      return !seat || seat.occupied;
-    });
-
-    if (alreadyOccupied.length > 0) {
-      return res.status(400).json({
-        message: `Some seats are already booked or invalid: ${alreadyOccupied.join(", ")}`,
-      });
-    }
-
-    // Book the seats
-    seatIds.forEach((seatId) => {
-      const seat = event.seatingLayout.find((s) => s.id === seatId);
-      if (seat) {
-        seat.occupied = true;
-        seat.attendee = req.user.id;
+    // Update the seats inside seatingLayout
+    const updatedLayout = event.seatingLayout.map((seat) => {
+      if (seatIds.includes(seat.id)) {
+        if (seat.occupied) {
+          throw new Error(`Seat ${seat.id} is already booked`);
+        }
+        return {
+          ...seat,
+          occupied: true,
+          attendee: attendeeId,
+        };
       }
+      return seat;
     });
-
+    const alreadyBooked = seatIds.filter(id =>
+      event.seatingLayout.find(seat => seat.id === id && seat.occupied)
+    );
+    if (alreadyBooked.length > 0) {
+      return res.status(400).json({
+        message: `Seats already booked: ${alreadyBooked.join(", ")}`
+      });
+    }
+    
+    event.seatingLayout = updatedLayout;
+    event.markModified('seatingLayout'); // 👈 Add this line
     await event.save();
-    res.status(200).json({ message: "Seats booked successfully" });
-  } catch (err) {
-    console.error("Booking error:", err.message);
-    res.status(500).json({ message: "Server error", error: err.message });
+
+
+    res.status(200).json({ message: "Booking successful", bookedSeats: seatIds });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: error.message || "Booking failed" });
   }
 });
 
