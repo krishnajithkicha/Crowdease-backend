@@ -51,6 +51,8 @@ const venueSchema = new mongoose.Schema({
   seatingType: { type: String, enum: ["seatSelection", "noPreference"], required: true },
   seatingLayout: { type: String },
   image: { type: String, required: true },
+  entrances: [{ row: Number, col: Number }],
+  exits: [{ row: Number, col: Number }],
 });
 
 const eventSchema = new mongoose.Schema({
@@ -74,6 +76,15 @@ const eventSchema = new mongoose.Schema({
     },
   ],
 });
+const ticketSchema = new mongoose.Schema({
+  eventId: { type: mongoose.Schema.Types.ObjectId, ref: "Event", required: true },
+  attendeeId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+  seatId: { type: String, required: true },
+  price: { type: Number, required: true },
+  purchasedAt: { type: Date, default: Date.now },
+});
+
+const Ticket = mongoose.models.Ticket || mongoose.model("Ticket", ticketSchema);
 
 // Models
 const User = mongoose.models.User || mongoose.model("User", userSchema);
@@ -216,12 +227,19 @@ app.post(
       const bannerImageUrl = await uploadToImgBB(req.files.bannerImage[0]);
       const venueImageUrl = await uploadToImgBB(req.files.venueImage[0]);
 
+
+
+      const { entrances = [], exits = [] } = req.body;
+
+      // Then later in the Venue creation:
       const venue = new Venue({
         venueName,
         maxCapacity: parseInt(maxCapacity, 10),
         seatingType,
         seatingLayout: JSON.stringify(seatingLayout),
         image: venueImageUrl,
+        entrances,
+        exits,
       });
       await venue.save();
 
@@ -413,6 +431,59 @@ app.get("/api/events/:eventId", async (req, res) => {
 // Book Seats
 // Book Seats
 // Book Seats
+app.put("/api/events/:eventId/book-seats", authMiddleware, async (req, res) => {
+  const { eventId } = req.params;
+  const { seatIds } = req.body;
+
+  try {
+    const event = await Event.findById(eventId);
+    if (!event) return res.status(404).json({ message: "Event not found" });
+
+    const venue = await Venue.findOne({ eventId });
+    if (!venue) return res.status(404).json({ message: "Venue not found" });
+
+    const seatsBookedByUser = event.seatingLayout.filter(
+      (seat) => seat.attendee?.toString() === req.user.id
+    );
+
+    if (seatsBookedByUser.length + seatIds.length > 6) {
+      return res.status(400).json({ message: "You can only book up to 6 seats per event." });
+    }
+
+    const alreadyBookedSeats = seatIds.filter((seatId) =>
+      event.seatingLayout.find((seat) => seat.id === seatId && seat.occupied)
+    );
+    if (alreadyBookedSeats.length > 0) {
+      return res.status(400).json({
+        message: `Some seats are already booked: ${alreadyBookedSeats.join(", ")}`,
+      });
+    }
+
+    seatIds.forEach((seatId) => {
+      const seat = event.seatingLayout.find((seat) => seat.id === seatId);
+      if (seat && !seat.occupied) {
+        seat.occupied = true;
+        seat.attendee = req.user.id;
+      }
+    });
+
+    await event.save();
+    res.status(200).json({
+      message: "Seats booked successfully",
+      bookedSeats: seatIds,
+      entrances: venue.entrances,
+      layout: event.seatingLayout, // optional for frontend visualization
+    });
+  } catch (err) {
+    console.error("Booking Error:", err.message);
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+
+// Book Seats
+// Book Seats
+// Book Seats
 app.post("/api/bookings", authMiddleware, async (req, res) => {
   try {
     const { eventId, seatIds, attendeeId } = req.body;
@@ -420,20 +491,9 @@ app.post("/api/bookings", authMiddleware, async (req, res) => {
     const event = await Event.findById(eventId);
     if (!event) return res.status(404).json({ message: "Event not found" });
 
-    // Update the seats inside seatingLayout
-    const updatedLayout = event.seatingLayout.map((seat) => {
-      if (seatIds.includes(seat.id)) {
-        if (seat.occupied) {
-          throw new Error(`Seat ${seat.id} is already booked`);
-        }
-        return {
-          ...seat,
-          occupied: true,
-          attendee: attendeeId,
-        };
-      }
-      return seat;
-    });
+    const venue = await Venue.findOne({ eventId });
+    if (!venue) return res.status(404).json({ message: "Venue not found" });
+
     const alreadyBooked = seatIds.filter(id =>
       event.seatingLayout.find(seat => seat.id === id && seat.occupied)
     );
@@ -442,20 +502,88 @@ app.post("/api/bookings", authMiddleware, async (req, res) => {
         message: `Seats already booked: ${alreadyBooked.join(", ")}`
       });
     }
-    
+
+    const updatedLayout = event.seatingLayout.map((seat) => {
+      if (seatIds.includes(seat.id)) {
+        return {
+          ...seat,
+          occupied: true,
+          attendee: attendeeId,
+        };
+      }
+      return seat;
+    });
+
     event.seatingLayout = updatedLayout;
-    event.markModified('seatingLayout'); // 👈 Add this line
+    event.markModified('seatingLayout');
     await event.save();
 
-
-    res.status(200).json({ message: "Booking successful", bookedSeats: seatIds });
+    res.status(200).json({
+      message: "Booking successful",
+      bookedSeats: seatIds,
+      entrances: venue.entrances,
+      layout: updatedLayout,
+    });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: error.message || "Booking failed" });
   }
 });
 
+app.get("/api/tickets/:ticketId", authMiddleware, async (req, res) => {
+  const { ticketId } = req.params;
 
+  if (!mongoose.Types.ObjectId.isValid(ticketId)) {
+    return res.status(400).json({ message: "Invalid ticket ID format." });
+  }
+
+  try {
+    const ticket = await Ticket.findById(ticketId)
+      .populate("attendeeId", "name email")
+      .populate("eventId");
+
+    if (!ticket) {
+      return res.status(404).json({ message: "Ticket not found" });
+    }
+
+    res.status(200).json(ticket);
+  } catch (err) {
+    console.error("Error fetching ticket:", err.message);
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+app.get('/api/tickets', authMiddleware, async (req, res) => {
+  try {
+    const tickets = await Ticket.find({ userId: req.user.id }); // Filter by logged-in user
+    res.json(tickets);
+  } catch (error) {
+    console.error('Failed to fetch tickets:', error);
+    res.status(500).send('Server Error');
+  }
+});
+
+// DELETE any event as admin
+app.delete("/api/admin/delete-event/:eventId", authMiddleware, async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    const userRole = req.user.role;
+
+    if (userRole !== "admin") {
+      return res.status(403).json({ message: "Access denied: Admins only" });
+    }
+
+    const deleted = await Event.findByIdAndDelete(eventId);
+
+    if (!deleted) {
+      return res.status(404).json({ message: "Event not found" });
+    }
+
+    res.status(200).json({ message: "Event deleted by admin" });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
 
 
 // Start Server
